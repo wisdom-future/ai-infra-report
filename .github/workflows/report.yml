@@ -3,21 +3,18 @@ name: AI Infra 早报
 on:
   schedule:
     - cron: '0 0 * * *'  # UTC 0:00 = 北京时间 8:00
-  workflow_dispatch:     # 支持手动触发
+  workflow_dispatch:
 
 jobs:
   report:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-
-      - name: Install dependencies
-        run: pip install feedparser
-
+      - name: Install requests
+        run: pip install requests
       - name: Run AI Infra Report
         run: python main.py
