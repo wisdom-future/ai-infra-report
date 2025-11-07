@@ -24,14 +24,16 @@ def main():
     news = []
     seen_links = set()
     
-    # 放宽查询，去掉 min_faves 限制
+    # 超宽松关键词组合（覆盖所有 AI 基础设施热点）
     queries = [
-        'ai infrastructure OR gpu OR datacenter OR hyperscaler OR stargate',
-        'nvidia OR openai OR aws OR azure OR "data center"',
-        'blackwell OR gb200 OR h100 OR ai chip OR liquid cooling'
+        'ai infrastructure OR gpu OR datacenter OR hyperscaler OR stargate OR power OR cooling',
+        'nvidia OR openai OR aws OR azure OR google OR microsoft OR "data center" OR "ai chip"',
+        'blackwell OR gb200 OR h100 OR h200 OR b200 OR liquid cooling OR rack OR cluster',
+        'energy OR electricity OR nvidia OR tesla OR "ai training" OR "inference"',
+        'cloud OR aws OR azure OR gcp OR oracle OR "ai cloud"'
     ]
     
-    print("开始抓取 AI Infrastructure 新闻...")
+    print("开始抓取 AI Infrastructure 新闻（过去 3 天）...")
     
     for q in queries:
         url = f'https://rsshub.app/x/search/{urllib.parse.quote(q)}'
@@ -46,7 +48,7 @@ def main():
             print(f"  → 抓取失败: {e}")
             continue
         
-        for e in feed.entries[:20]:
+        for e in feed.entries[:30]:  # 每查询看前30条
             link = e.link
             if link in seen_links:
                 continue
@@ -58,14 +60,14 @@ def main():
             except:
                 pub = datetime.now()
             
-            # 只看最近 36 小时
-            if pub < datetime.now() - timedelta(hours=36):
+            # 扩大时间窗：过去 3 天（72 小时）
+            if pub < datetime.now() - timedelta(hours=72):
                 continue
                 
             text = (e.title or "") + " " + (e.summary or "")
             text = text.replace('\n', ' ').strip()
             
-            # 提取点赞数（支持 K、千、万）
+            # 提取点赞数（支持 K、千、万、逗号、小数点）
             likes = 0
             m = re.search(r'([\d,.]+) ?[Kk]? ?[Ll]ikes?', text, re.I)
             if m:
@@ -75,30 +77,33 @@ def main():
                 except:
                     likes = 0
             
-            title = text[:120]
-            print(f"  - 候选: {title[:60]}... (点赞: {likes})")
+            title = text[:150]  # 标题更长
+            print(f"  - 候选: {title[:70]}... (点赞: {likes})")
             
-            # 放宽入选条件
-            if (likes >= 5 or 
-                any(k in text.lower() for k in 
-                    ['nvidia', 'openai', 'aws', 'azure', 'gpu', 'datacenter', 
-                     'blackwell', 'stargate', 'ai infrastructure', 'liquid cooling', 'data center'])):
+            # 超宽松入选条件：点赞 >= 1 或含任意关键词
+            if (likes >= 1 or 
+                any(k in text.lower() for k in [
+                    'nvidia', 'openai', 'aws', 'azure', 'google', 'microsoft',
+                    'gpu', 'datacenter', 'blackwell', 'stargate', 'h100', 'h200',
+                    'liquid cooling', 'power', 'energy', 'ai infrastructure',
+                    'cloud', 'cluster', 'training', 'inference', 'chip', 'rack'
+                ])):
                 
                 news.append(f"**{title}**\n点赞: {likes} | {pub.strftime('%m/%d %H:%M')}\n[链接]({link})")
                 print(f"  入选！")
     
-    print(f"\n最终筛选出 {len(news)} 条关键新闻")
+    print(f"\n最终筛选出 {len(news)} 条关键新闻（过去 3 天）")
     
-    # 无论有没有新闻，都发一条消息（确保你知道脚本在跑）
+    # 无论如何都发消息
     if news:
-        t = f"【AI Infra 早报 · {datetime.now().strftime('%m/%d')}】"
-        b = '\n\n---\n\n'.join(news[:10])
+        t = f"【AI Infra 早报 · {datetime.now().strftime('%m/%d')}】（3天汇总）"
+        b = '\n\n---\n\n'.join(news[:15])  # 最多15条
         send_wechat(t, b)
     else:
         t = "AI Infra 早报 · 运行正常"
-        b = ("今日暂无高赞 AI 基础设施新闻（点赞 ≥5 或含关键词）。\n"
+        b = ("过去 3 天暂无符合条件的 AI 基础设施新闻。\n"
               "脚本运行正常，明天 8:00 继续推送！\n"
-              "如需调整关键词，请修改 `main.py` 中的 `queries` 列表。")
+              "当前过滤：点赞 ≥1 或含关键词，时间窗 72 小时。")
         send_wechat(t, b)
 
 if __name__ == '__main__':
