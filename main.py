@@ -24,21 +24,24 @@ def main():
     news = []
     seen_links = set()
     
-    # 超宽松关键词组合（覆盖所有 AI 基础设施热点）
-    queries = [
-        'ai infrastructure OR gpu OR datacenter OR hyperscaler OR stargate OR power OR cooling',
-        'nvidia OR openai OR aws OR azure OR google OR microsoft OR "data center" OR "ai chip"',
-        'blackwell OR gb200 OR h100 OR h200 OR b200 OR liquid cooling OR rack OR cluster',
-        'energy OR electricity OR nvidia OR tesla OR "ai training" OR "inference"',
-        'cloud OR aws OR azure OR gcp OR oracle OR "ai cloud"'
+    # 关键账户 + 宽松搜索（用户feed更稳）
+    sources = [
+        # 用户feed（高优先，抓官方/影响者帖子）
+        ('nvidia', 'https://rsshub.app/x/user/nvidia'),
+        ('OpenAI', 'https://rsshub.app/x/user/OpenAI'),
+        ('awscloud', 'https://rsshub.app/x/user/awscloud'),
+        ('NVIDIADC', 'https://rsshub.app/x/user/NVIDIADC'),
+        ('NVIDIAAI', 'https://rsshub.app/x/user/NVIDIAAI'),
+        # 备用搜索（去min_faves）
+        ('ai infrastructure OR gpu OR datacenter', 'https://rsshub.app/x/search/ai%20infrastructure%20OR%20gpu%20OR%20datacenter'),
+        ('nvidia OR blackwell OR stargate', 'https://rsshub.app/x/search/nvidia%20OR%20blackwell%20OR%20stargate'),
+        ('openai OR aws OR azure OR hyperscaler', 'https://rsshub.app/x/search/openai%20OR%20aws%20OR%20azure%20OR%20hyperscaler')
     ]
     
     print("开始抓取 AI Infrastructure 新闻（过去 3 天）...")
     
-    for q in queries:
-        url = f'https://rsshub.app/x/search/{urllib.parse.quote(q)}'
-        print(f"正在查询: {q}")
-        print(f"RSS URL: {url}")
+    for name, url in sources:
+        print(f"正在查询源: {name} - {url}")
         
         try:
             feed = feedparser.parse(url)
@@ -48,26 +51,26 @@ def main():
             print(f"  → 抓取失败: {e}")
             continue
         
-        for e in feed.entries[:30]:  # 每查询看前30条
+        for e in feed.entries[:25]:  # 每源前25条
             link = e.link
             if link in seen_links:
                 continue
             seen_links.add(link)
             
-            # 解析发布时间
+            # 解析时间
             try:
                 pub = datetime(*e.published_parsed[:6])
             except:
                 pub = datetime.now()
             
-            # 扩大时间窗：过去 3 天（72 小时）
+            # 3天窗
             if pub < datetime.now() - timedelta(hours=72):
                 continue
                 
             text = (e.title or "") + " " + (e.summary or "")
             text = text.replace('\n', ' ').strip()
             
-            # 提取点赞数（支持 K、千、万、逗号、小数点）
+            # 点赞提取
             likes = 0
             m = re.search(r'([\d,.]+) ?[Kk]? ?[Ll]ikes?', text, re.I)
             if m:
@@ -77,33 +80,32 @@ def main():
                 except:
                     likes = 0
             
-            title = text[:150]  # 标题更长
+            title = text[:150]
             print(f"  - 候选: {title[:70]}... (点赞: {likes})")
             
-            # 超宽松入选条件：点赞 >= 1 或含任意关键词
+            # 入选条件
             if (likes >= 1 or 
                 any(k in text.lower() for k in [
-                    'nvidia', 'openai', 'aws', 'azure', 'google', 'microsoft',
-                    'gpu', 'datacenter', 'blackwell', 'stargate', 'h100', 'h200',
-                    'liquid cooling', 'power', 'energy', 'ai infrastructure',
-                    'cloud', 'cluster', 'training', 'inference', 'chip', 'rack'
+                    'nvidia', 'openai', 'aws', 'azure', 'gpu', 'datacenter', 
+                    'blackwell', 'stargate', 'h100', 'h200', 'liquid cooling', 
+                    'power', 'energy', 'ai infrastructure', 'cloud', 'cluster', 
+                    'training', 'inference', 'chip', 'rack', 'hyperscaler'
                 ])):
                 
-                news.append(f"**{title}**\n点赞: {likes} | {pub.strftime('%m/%d %H:%M')}\n[链接]({link})")
-                print(f"  入选！")
+                news.append(f"**{name}: {title}**\n点赞: {likes} | {pub.strftime('%m/%d %H:%M')}\n[链接]({link})")
+                print(f"  ✓ 入选！")
     
-    print(f"\n最终筛选出 {len(news)} 条关键新闻（过去 3 天）")
+    print(f"\n最终筛选出 {len(news)} 条关键新闻")
     
-    # 无论如何都发消息
     if news:
         t = f"【AI Infra 早报 · {datetime.now().strftime('%m/%d')}】（3天汇总）"
-        b = '\n\n---\n\n'.join(news[:15])  # 最多15条
+        b = '\n\n---\n\n'.join(news[:15])
         send_wechat(t, b)
     else:
         t = "AI Infra 早报 · 运行正常"
-        b = ("过去 3 天暂无符合条件的 AI 基础设施新闻。\n"
-              "脚本运行正常，明天 8:00 继续推送！\n"
-              "当前过滤：点赞 ≥1 或含关键词，时间窗 72 小时。")
+        b = ("过去 3 天暂无符合条件的新闻（已监控 @nvidia 等账户）。\n"
+              "脚本运行正常，明天 8:00 继续！\n"
+              "调试: 检查日志源是否抓到帖子。")
         send_wechat(t, b)
 
 if __name__ == '__main__':
